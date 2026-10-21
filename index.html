@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sistema de Monitoreo - Dashboard</title>
+  
+  <!-- Fuente Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- Estilos CSS locales -->
+  <link rel="stylesheet" href="styles.css">
+  
+  <!-- Librería Chart.js para gráficas -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+  <!-- VISTA DE LOGIN Y REGISTRO -->
+  <div id="login-section" class="login-wrapper">
+    <div class="login-card">
+      <h2 id="auth-title">Iniciar Sesión</h2>
+      <p id="auth-subtitle">Plataforma de Monitoreo de Sensores</p>
+      
+      <div class="form-group">
+        <label for="email">Correo Electrónico</label>
+        <input type="email" id="email" placeholder="usuario@ejemplo.com">
+      </div>
+      
+      <div class="form-group">
+        <label for="password">Contraseña</label>
+        <input type="password" id="password" placeholder="••••••••">
+      </div>
+
+      <!-- Mensajes de estado -->
+      <p id="error-message" style="color: #ef4444; font-size: 0.85rem; margin-bottom: 1rem; display: none;"></p>
+      <p id="success-message" style="color: #10b981; font-size: 0.85rem; margin-bottom: 1rem; display: none;"></p>
+
+      <!-- Botón Principal -->
+      <button class="btn" id="btn-auth-submit" onclick="handleSubmit()">Ingresar al Panel</button>
+
+      <!-- Separador Visual -->
+      <div style="margin: 1.2rem 0; text-align: center; color: var(--text-muted); font-size: 0.85rem; display: flex; align-items: center; gap: 0.5rem;">
+        <hr style="flex: 1; border: none; border-top: 1px solid var(--border);">
+        <span>O</span>
+        <hr style="flex: 1; border: none; border-top: 1px solid var(--border);">
+      </div>
+
+      <!-- Botón Google -->
+      <button class="btn" style="background-color: #ffffff; color: #374151; border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; gap: 0.5rem;" onclick="loginConGoogle()">
+        <svg width="18" height="18" viewBox="0 0 24 24">
+          <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"/>
+          <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.26v3.15C3.25 21.3 7.31 24 12 24z"/>
+          <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.26C.46 8.16 0 9.98 0 12s.46 3.84 1.26 5.42l4.02-3.15z"/>
+          <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.25 2.7 1.26 6.58l4.02 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/>
+        </svg>
+        Continuar con Google
+      </button>
+
+      <!-- Alternar entre Login y Registro -->
+      <p style="margin-top: 1.2rem; font-size: 0.85rem; color: var(--text-muted);">
+        <span id="toggle-text">¿No tienes una cuenta?</span> 
+        <a href="#" id="toggle-link" onclick="toggleAuthMode(event)" style="color: var(--primary); font-weight: 600; text-decoration: none;">Registrarse</a>
+      </p>
+    </div>
+  </div>
+
+  <!-- VISTA DEL DASHBOARD -->
+  <div id="dashboard-section" class="dashboard-container hidden">
+    <!-- Barra Lateral -->
+    <aside class="sidebar">
+      <div>
+        <h3>Sensor de flexión 🚨</h3>
+        <nav>
+          <a href="#" class="active" onclick="switchTab('view-dashboard', this)">Panel Principal</a>
+          <a href="#" onclick="switchTab('view-history', this)">Historial</a>
+        </nav>
+      </div>
+      <button class="btn-logout" onclick="logout()">Cerrar Sesión</button>
+    </aside>
+
+    <!-- Contenido Principal -->
+    <main class="main-content">
+      
+      <!-- ==================== VISTA 1: PANEL PRINCIPAL ==================== -->
+      <div id="view-dashboard" class="tab-view">
+        <div class="header">
+          <div>
+            <h2>Panel de Control</h2>
+            <p class="user-info">Usuario: <span id="user-display">Cargando...</span></p>
+          </div>
+          
+          <div style="display: flex; gap: 1rem; align-items: center;">
+            <!-- Selector de Usuarios (Oculto para usuarios normales, visible para Admin) -->
+            <div id="admin-selector-container" class="hidden" style="display: flex; align-items: center; gap: 0.5rem;">
+              <label for="select-user" style="font-size: 0.85rem; font-weight: 600;">Ver datos de:</label>
+              <select id="select-user" onchange="cambiarUsuarioConsultado(this.value)" style="padding: 0.5rem 0.8rem; border-radius: 6px; border: 1px solid var(--border); outline: none;">
+                <option value="">Cargando usuarios...</option>
+              </select>
+            </div>
+
+            <button class="btn" style="width: auto; padding: 0.6rem 1.2rem;" onclick="generarLecturaPrueba()">
+              ⚡ Generar lectura de prueba
+            </button>
+          </div>
+        </div>
+
+        <!-- Indicadores rápidos -->
+        <div class="metrics-grid">
+          <div class="card-metric">
+            <h4>Flex</h4>
+            <div class="value" id="val1">--</div>
+          </div>
+          <div class="card-metric">
+            <h4>MG</h4>
+            <div class="value" id="val2">--</div>
+          </div>
+          <div class="card-metric">
+            <h4>Variable del día</h4>
+            <div class="value" id="val3">--</div>
+          </div>
+        </div>
+
+        <!-- Gráfica en tiempo real -->
+        <div class="dashboard-grid">
+          <div class="card-chart">
+            <h3>Comportamiento en Tiempo Real</h3>
+            <canvas id="realtimeChart" height="100"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- ==================== VISTA 2: HISTORIAL ==================== -->
+      <div id="view-history" class="tab-view hidden">
+        <div class="header">
+          <div>
+            <h2>Historial de Lecturas</h2>
+            <p class="user-info">Registro completo de datos almacenados en Firebase</p>
+          </div>
+          <button class="btn" style="width: auto; padding: 0.6rem 1.2rem; background-color: #10b981;" onclick="cargarHistorialCompleto()">
+            🔄 Actualizar Historial
+          </button>
+        </div>
+
+        <div class="card-chart">
+          <div style="overflow-x: auto;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Fecha y Hora</th>
+                  <th>Flex</th>
+                  <th>MG</th>
+                  <th>Variable del Día</th>
+                </tr>
+              </thead>
+              <tbody id="history-table-body">
+                <tr>
+                  <td colspan="4" style="text-align: center; color: var(--text-muted);">Cargando registros...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <!-- SDKs de Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+
+  <!-- Lógica JavaScript local -->
+  <script src="script.js"></script>
+</body>
+</html>
