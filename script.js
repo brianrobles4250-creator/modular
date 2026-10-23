@@ -405,3 +405,92 @@ function loginConGoogle() {
       }
     });
 }
+
+// ==================== LÓGICA DE CONEXIÓN BLUETOOTH ====================
+let portBT = null;
+let readerBT = null;
+
+async function conectarBluetooth() {
+  const btn = document.getElementById('btn-bluetooth');
+
+  // Verificar soporte de Web Serial API en el navegador (Chrome/Edge)
+  if (!("serial" in navigator)) {
+    alert("Tu navegador no soporta la conexión Serial/Bluetooth. Utiliza Google Chrome o Microsoft Edge.");
+    return;
+  }
+
+  try {
+    // Abrir ventana emergente para seleccionar el puerto/dispositivo ESP32
+    portBT = await navigator.serial.requestPort();
+    await portBT.open({ baudRate: 115200 });
+
+    btn.innerText = "🔴 Desconectar Bluetooth";
+    btn.style.backgroundColor = "#ef4444";
+    btn.onclick = desconectarBluetooth;
+
+    leerDatosBluetooth();
+  } catch (error) {
+    console.error("Error al conectar por Bluetooth: ", error);
+  }
+}
+
+async function leerDatosBluetooth() {
+  const textDecoder = new TextDecoderStream();
+  const readableStreamClosed = portBT.readable.pipeTo(textDecoder.writable);
+  readerBT = textDecoder.readable.getReader();
+
+  let lineBuffer = "";
+
+  while (true) {
+    const { value, done } = await readerBT.read();
+    if (done) {
+      readerBT.releaseLock();
+      break;
+    }
+    
+    lineBuffer += value;
+    const lines = lineBuffer.split("\n");
+    lineBuffer = lines.pop(); // Guardar fragmento incompleto
+
+    for (const line of lines) {
+      const datos = line.trim().split(",");
+      if (datos.length === 3) {
+        const flexVal = parseFloat(datos[0]);
+        const mgVal = parseFloat(datos[1]);
+        const varDiaVal = parseFloat(datos[2]);
+
+        // Enviar la lectura recibida a Firestore para el usuario activo
+        guardarLecturaBluetooth(flexVal, mgVal, varDiaVal);
+      }
+    }
+  }
+}
+
+function guardarLecturaBluetooth(flex, mg, varDia) {
+  if (!targetUserId) return;
+
+  const lectura = {
+    userId: targetUserId,
+    flex: flex,
+    mg: mg,
+    variableDia: varDia,
+    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+  };
+
+  db.collection('lecturas').add(lectura)
+    .catch((err) => console.error("Error al guardar lectura por Bluetooth: ", err));
+}
+
+async function desconectarBluetooth() {
+  if (readerBT) {
+    await readerBT.cancel();
+  }
+  if (portBT) {
+    await portBT.close();
+  }
+
+  const btn = document.getElementById('btn-bluetooth');
+  btn.innerText = "🔵 Conectar ESP32 (Bluetooth)";
+  btn.style.backgroundColor = "#2563eb";
+  btn.onclick = conectarBluetooth;
+}
