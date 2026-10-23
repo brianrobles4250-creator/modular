@@ -450,16 +450,29 @@ async function leerDatosBluetooth() {
     
     lineBuffer += value;
     const lines = lineBuffer.split("\n");
-    lineBuffer = lines.pop(); // Guardar fragmento incompleto
+    lineBuffer = lines.pop();
 
     for (const line of lines) {
-      const datos = line.trim().split(",");
+      const mensaje = line.trim();
+
+      // Detectar mensajes de calibración
+      if (mensaje === "INICIO_CALIBRACION") {
+        console.log("⚙️ El ESP32 ha iniciado la secuencia de calibración.");
+        continue;
+      }
+      
+      if (mensaje === "FIN_CALIBRACION") {
+        alert("✅ ¡Calibración completada y guardada en la memoria Flash del ESP32!");
+        continue;
+      }
+
+      // Procesar datos de lecturas normales (flex,emg,variableDia)
+      const datos = mensaje.split(",");
       if (datos.length === 3) {
         const flexVal = parseFloat(datos[0]);
         const mgVal = parseFloat(datos[1]);
         const varDiaVal = parseFloat(datos[2]);
 
-        // Enviar la lectura recibida a Firestore para el usuario activo
         guardarLecturaBluetooth(flexVal, mgVal, varDiaVal);
       }
     }
@@ -493,4 +506,39 @@ async function desconectarBluetooth() {
   btn.innerText = "🔵 Conectar ESP32 (Bluetooth)";
   btn.style.backgroundColor = "#2563eb";
   btn.onclick = conectarBluetooth;
+}
+
+// ==================== ENVIAR COMANDO DE CALIBRACIÓN ====================
+async function enviarComandoCalibrar() {
+  if (!portBT || !portBT.writable) {
+    alert("Primero debes conectar el ESP32 por Bluetooth.");
+    return;
+  }
+
+  const confirmacion = confirm(
+    "Iniciando secuencia de calibración:\n\n" +
+    "1. Tendrás 5 seg para relajar el cuello.\n" +
+    "2. 3 seg para hacer fuerza máxima hacia atrás.\n" +
+    "3. 3 seg para mantener la cabeza recta.\n" +
+    "4. 3 seg para mirar hacia abajo al máximo.\n\n" +
+    "¿Deseas comenzar ahora?"
+  );
+
+  if (!confirmacion) return;
+
+  try {
+    const textEncoder = new TextEncoderStream();
+    const writableStreamClosed = textEncoder.readable.pipeTo(portBT.writable);
+    const writer = textEncoder.writable.getWriter();
+
+    // Enviar el comando exacto que espera el ESP32
+    await writer.write("calibrar\n");
+    writer.releaseLock();
+
+    console.log("Comando 'calibrar' enviado al ESP32.");
+    alert("Calibración iniciada en el ESP32. Sigue las instrucciones del dispositivo.");
+  } catch (error) {
+    console.error("Error al enviar el comando de calibración: ", error);
+    alert("No se pudo enviar el comando por Bluetooth.");
+  }
 }
