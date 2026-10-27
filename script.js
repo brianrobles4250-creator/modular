@@ -10,7 +10,7 @@ const firebaseConfig = {
 };
 
 // Configuración del correo Administrador
-const ADMIN_EMAIL = "roblesb921@gmail.com"; // <--- Reemplaza con tu correo admin
+const ADMIN_EMAIL = "roblesb921@gmail.com";
 
 // Inicializar Firebase
 firebase.initializeApp(firebaseConfig);
@@ -19,30 +19,41 @@ const db = firebase.firestore();
 
 let chartInstance = null;
 let unsubscribeLecturas = null;
-let targetUserId = null; // ID del usuario del cual estamos viendo los datos
+let targetUserId = null; // ID del usuario consultado/simulado
+
+// Variables globales para la conexión Bluetooth
+let portBT = null;
+let readerBT = null;
 
 // 2. Control del Estado de Autenticación en Tiempo Real
 auth.onAuthStateChanged((user) => {
   if (user) {
-    document.getElementById('user-display').innerText = user.email;
-    document.getElementById('login-section').classList.add('hidden');
-    document.getElementById('dashboard-section').classList.remove('hidden');
+    const userDisplay = document.getElementById('user-display');
+    if (userDisplay) userDisplay.innerText = user.email;
+
+    document.getElementById('login-section')?.classList.add('hidden');
+    document.getElementById('dashboard-section')?.classList.remove('hidden');
 
     initChart();
 
-    // Si el usuario es el administrador, mostramos el selector
+    const adminSelector = document.getElementById('admin-selector-container');
+    const adminButtons = document.getElementById('admin-simulation-buttons');
+
+    // Verificar si el usuario es el administrador
     if (user.email === ADMIN_EMAIL) {
-      document.getElementById('admin-selector-container').classList.remove('hidden');
+      if (adminSelector) adminSelector.classList.remove('hidden');
+      if (adminButtons) adminButtons.classList.remove('hidden');
       cargarListaUsuariosAdmin(user.uid);
     } else {
-      document.getElementById('admin-selector-container').classList.add('hidden');
+      if (adminSelector) adminSelector.classList.add('hidden');
+      if (adminButtons) adminButtons.classList.add('hidden');
       targetUserId = user.uid;
-      escucharDatosEnTiempoReal(targetUserId);
+      escucharLecturasEnTiempoReal();
     }
   } else {
-    document.getElementById('login-section').classList.remove('hidden');
-    document.getElementById('dashboard-section').classList.add('hidden');
-    
+    document.getElementById('login-section')?.classList.remove('hidden');
+    document.getElementById('dashboard-section')?.classList.add('hidden');
+
     if (unsubscribeLecturas) unsubscribeLecturas();
   }
 });
@@ -50,17 +61,17 @@ auth.onAuthStateChanged((user) => {
 // 3. Funciones de Administrador
 function cargarListaUsuariosAdmin(currentAdminUid) {
   const select = document.getElementById('select-user');
-  
+  if (!select) return;
+
   db.collection('usuarios').get().then((querySnapshot) => {
     select.innerHTML = '';
-    
+
     querySnapshot.forEach((doc) => {
       const uData = doc.data();
       const option = document.createElement('option');
       option.value = doc.id;
       option.textContent = uData.email || doc.id;
-      
-      // Seleccionar por defecto al admin al cargar
+
       if (doc.id === currentAdminUid) {
         option.selected = true;
       }
@@ -68,7 +79,7 @@ function cargarListaUsuariosAdmin(currentAdminUid) {
     });
 
     targetUserId = select.value || currentAdminUid;
-    escucharDatosEnTiempoReal(targetUserId);
+    escucharLecturasEnTiempoReal();
   }).catch((error) => {
     console.error("Error al cargar la lista de usuarios: ", error);
   });
@@ -77,24 +88,22 @@ function cargarListaUsuariosAdmin(currentAdminUid) {
 function cambiarUsuarioConsultado(newUserId) {
   if (!newUserId) return;
   targetUserId = newUserId;
-  
-  // Reiniciar escucha para el nuevo usuario seleccionado
-  escucharDatosEnTiempoReal(targetUserId);
 
-  // Si estamos en la pestaña de historial, reloaded tabla
+  escucharLecturasEnTiempoReal();
+
   const historyTab = document.getElementById('view-history');
-  if (!historyTab.classList.contains('hidden')) {
+  if (historyTab && !historyTab.classList.contains('hidden')) {
     cargarHistorialCompleto();
   }
 }
 
-// 4. Autenticación (Login y Logout)
+// 4. Autenticación (Login, Logout y Google)
 function login() {
   const email = document.getElementById('email').value;
   const password = document.getElementById('password').value;
   const errorMsg = document.getElementById('error-message');
 
-  errorMsg.style.display = 'none';
+  if (errorMsg) errorMsg.style.display = 'none';
 
   auth.signInWithEmailAndPassword(email, password)
     .then(() => {
@@ -102,8 +111,33 @@ function login() {
       document.getElementById('password').value = '';
     })
     .catch((error) => {
-      errorMsg.innerText = "Error: Email o contraseña incorrectos.";
-      errorMsg.style.display = 'block';
+      if (errorMsg) {
+        errorMsg.innerText = "Error: Email o contraseña incorrectos.";
+        errorMsg.style.display = 'block';
+      }
+    });
+}
+
+function loginConGoogle() {
+  const provider = new firebase.auth.GoogleAuthProvider();
+  const errorMsg = document.getElementById('error-message');
+
+  if (errorMsg) errorMsg.style.display = 'none';
+
+  auth.signInWithPopup(provider)
+    .then((result) => {
+      const user = result.user;
+      return db.collection('usuarios').doc(user.uid).set({
+        email: user.email,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+    })
+    .catch((error) => {
+      console.error("Error al iniciar sesión con Google: ", error);
+      if (errorMsg) {
+        errorMsg.innerText = "Error al conectar con Google: " + error.message;
+        errorMsg.style.display = 'block';
+      }
     });
 }
 
@@ -126,21 +160,21 @@ function toggleAuthMode(event) {
   const errorMsg = document.getElementById('error-message');
   const successMsg = document.getElementById('success-message');
 
-  errorMsg.style.display = 'none';
-  successMsg.style.display = 'none';
+  if (errorMsg) errorMsg.style.display = 'none';
+  if (successMsg) successMsg.style.display = 'none';
 
   if (isRegisterMode) {
-    authTitle.innerText = 'Crear Cuenta';
-    authSubtitle.innerText = 'Regístrate para vincular tu sensor ESP32';
-    btnSubmit.innerText = 'Registrarse';
-    toggleText.innerText = '¿Ya tienes una cuenta?';
-    toggleLink.innerText = 'Iniciar Sesión';
+    if (authTitle) authTitle.innerText = 'Crear Cuenta';
+    if (authSubtitle) authSubtitle.innerText = 'Regístrate para ver tu monitoreo postural';
+    if (btnSubmit) btnSubmit.innerText = 'Registrarse';
+    if (toggleText) toggleText.innerText = '¿Ya tienes una cuenta?';
+    if (toggleLink) toggleLink.innerText = 'Iniciar Sesión';
   } else {
-    authTitle.innerText = 'Iniciar Sesión';
-    authSubtitle.innerText = 'Plataforma de Monitoreo de Sensores';
-    btnSubmit.innerText = 'Ingresar al Panel';
-    toggleText.innerText = '¿No tienes una cuenta?';
-    toggleLink.innerText = 'Registrarse';
+    if (authTitle) authTitle.innerText = 'Iniciar Sesión';
+    if (authSubtitle) authSubtitle.innerText = 'Plataforma de Monitoreo de Sensores';
+    if (btnSubmit) btnSubmit.innerText = 'Ingresar al Panel';
+    if (toggleText) toggleText.innerText = '¿No tienes una cuenta?';
+    if (toggleLink) toggleLink.innerText = 'Registrarse';
   }
 }
 
@@ -158,30 +192,33 @@ function registrarUsuario() {
   const errorMsg = document.getElementById('error-message');
   const successMsg = document.getElementById('success-message');
 
-  errorMsg.style.display = 'none';
-  successMsg.style.display = 'none';
+  if (errorMsg) errorMsg.style.display = 'none';
+  if (successMsg) successMsg.style.display = 'none';
 
   if (!email || !password) {
-    errorMsg.innerText = "Por favor completa todos los campos.";
-    errorMsg.style.display = 'block';
+    if (errorMsg) {
+      errorMsg.innerText = "Por favor completa todos los campos.";
+      errorMsg.style.display = 'block';
+    }
     return;
   }
 
   auth.createUserWithEmailAndPassword(email, password)
     .then((userCredential) => {
       const user = userCredential.user;
-      
-      // Guardar el usuario en la colección 'usuarios' para que el admin pueda verlo en la lista
       return db.collection('usuarios').doc(user.uid).set({
         email: user.email,
         createdAt: firebase.firestore.FieldValue.serverTimestamp()
       });
     })
     .then(() => {
-      successMsg.innerText = "¡Cuenta creada con éxito!";
-      successMsg.style.display = 'block';
+      if (successMsg) {
+        successMsg.innerText = "¡Cuenta creada con éxito!";
+        successMsg.style.display = 'block';
+      }
     })
     .catch((error) => {
+      if (!errorMsg) return;
       switch (error.code) {
         case 'auth/email-already-in-use':
           errorMsg.innerText = "El correo electrónico ya está registrado.";
@@ -203,14 +240,17 @@ function registrarUsuario() {
 function initChart() {
   if (chartInstance) return;
 
-  const ctx = document.getElementById('realtimeChart').getContext('2d');
+  const canvas = document.getElementById('realtimeChart');
+  if (!canvas) return;
+
+  const ctx = canvas.getContext('2d');
   chartInstance = new Chart(ctx, {
     type: 'line',
     data: {
       labels: [],
       datasets: [
         {
-          label: 'Flex',
+          label: 'Flex (°)',
           data: [],
           borderColor: '#4f46e5',
           backgroundColor: 'rgba(79, 70, 229, 0.1)',
@@ -218,7 +258,7 @@ function initChart() {
           fill: true
         },
         {
-          label: 'MG',
+          label: 'EMG (%)',
           data: [],
           borderColor: '#10b981',
           backgroundColor: 'rgba(16, 185, 129, 0.1)',
@@ -226,7 +266,7 @@ function initChart() {
           fill: true
         },
         {
-          label: 'Variable del día',
+          label: 'Activación Motor',
           data: [],
           borderColor: '#f59e0b',
           backgroundColor: 'rgba(245, 158, 11, 0.1)',
@@ -241,19 +281,19 @@ function initChart() {
         legend: { position: 'top' }
       },
       scales: {
-        y: { beginAtZero: false }
+        y: { beginAtZero: true }
       }
     }
   });
 }
 
-// 7. Escuchar Lecturas de la Base de Datos en Tiempo Real por Usuario Consultada
-function escucharDatosEnTiempoReal(userId) {
+// 7. Escuchar Lecturas de Firestore en Tiempo Real
+function escucharLecturasEnTiempoReal() {
+  if (!targetUserId) return;
   if (unsubscribeLecturas) unsubscribeLecturas();
 
   unsubscribeLecturas = db.collection('lecturas')
-    .where('userId', '==', userId)
-    .orderBy('timestamp', 'desc')
+    .where('userId', '==', targetUserId)
     .limit(10)
     .onSnapshot((snapshot) => {
       const registros = [];
@@ -261,166 +301,59 @@ function escucharDatosEnTiempoReal(userId) {
         registros.push(doc.data());
       });
 
-      registros.reverse();
-
       if (registros.length > 0) {
         const ultimo = registros[registros.length - 1];
-        document.getElementById('val1').innerText = ultimo.flex !== undefined ? ultimo.flex : '--';
-        document.getElementById('val2').innerText = ultimo.mg !== undefined ? ultimo.mg : '--';
-        document.getElementById('val3').innerText = ultimo.variableDia !== undefined ? ultimo.variableDia : '--';
 
-        const labels = registros.map(r => {
-          if (r.timestamp && typeof r.timestamp.toDate === 'function') {
-            return r.timestamp.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-          }
-          return 'Ahora';
-        });
+        const val1 = document.getElementById('val1');
+        const val2 = document.getElementById('val2');
+        const val3 = document.getElementById('val3');
 
-        chartInstance.data.labels = labels;
-        chartInstance.data.datasets[0].data = registros.map(r => r.flex);
-        chartInstance.data.datasets[1].data = registros.map(r => r.mg);
-        chartInstance.data.datasets[2].data = registros.map(r => r.variableDia);
-        chartInstance.update();
-      } else {
-        // Limpiar tarjeta y gráfica si el usuario seleccionado no tiene datos
-        document.getElementById('val1').innerText = '--';
-        document.getElementById('val2').innerText = '--';
-        document.getElementById('val3').innerText = '--';
-        chartInstance.data.labels = [];
-        chartInstance.data.datasets.forEach(ds => ds.data = []);
-        chartInstance.update();
-      }
-    }, (error) => {
-      console.error("Error al obtener lecturas: ", error);
-    });
-}
+        if (val1) val1.innerText = ultimo.flex !== undefined ? `${ultimo.flex}°` : '--';
+        if (val2) val2.innerText = ultimo.mg !== undefined ? `${ultimo.mg}%` : '--';
+        if (val3) val3.innerText = ultimo.activacionMotor === 1 ? '🟢 Activado' : '⚪ Apagado';
 
-// 8. Simulación de Envío de Datos (Asociados al Usuario Seleccionado)
-function generarLecturaPrueba() {
-  if (!targetUserId) {
-    alert("No hay un usuario activo o seleccionado.");
-    return;
-  }
+        const labels = registros.map(r => r.fecha || 'Sin fecha');
 
-  const nuevaLectura = {
-    userId: targetUserId,
-    flex: parseFloat((Math.random() * (90 - 10) + 10).toFixed(2)),
-    mg: parseFloat((Math.random() * (50 - 5) + 5).toFixed(2)),
-    variableDia: parseFloat((Math.random() * (100 - 20) + 20).toFixed(2)),
-    timestamp: firebase.firestore.FieldValue.serverTimestamp()
-  };
-
-  db.collection('lecturas').add(nuevaLectura)
-    .then((docRef) => {
-      console.log("Lectura simulada agregada con ID: ", docRef.id);
-    })
-    .catch((error) => {
-      console.error("Error al agregar lectura de prueba: ", error);
-    });
-}
-
-// 9. Navegación entre Pestañas
-function switchTab(viewId, element) {
-  document.querySelectorAll('.tab-view').forEach(view => view.classList.add('hidden'));
-  document.getElementById(viewId).classList.remove('hidden');
-
-  document.querySelectorAll('.sidebar nav a').forEach(link => link.classList.remove('active'));
-  element.classList.add('active');
-
-  if (viewId === 'view-history') {
-    cargarHistorialCompleto();
-  }
-}
-
-// 10. Cargar Historial Completo del Usuario Seleccionado
-function cargarHistorialCompleto() {
-  if (!targetUserId) return;
-
-  const tableBody = document.getElementById('history-table-body');
-  tableBody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Cargando registros...</td></tr>`;
-
-  db.collection('lecturas')
-    .where('userId', '==', targetUserId)
-    .orderBy('timestamp', 'desc')
-    .limit(50)
-    .get()
-    .then((querySnapshot) => {
-      if (querySnapshot.empty) {
-        tableBody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">No hay lecturas registradas para este usuario.</td></tr>`;
-        return;
-      }
-
-      let rowsHtml = '';
-      querySnapshot.forEach((doc) => {
-        const data = doc.data();
-        let fecha = 'Sin fecha';
-        
-        if (data.timestamp && typeof data.timestamp.toDate === 'function') {
-          fecha = data.timestamp.toDate().toLocaleString([], { 
-            dateStyle: 'short', 
-            timeStyle: 'medium' 
-          });
+        if (chartInstance) {
+          chartInstance.data.labels = labels;
+          chartInstance.data.datasets[0].data = registros.map(r => r.flex);
+          chartInstance.data.datasets[1].data = registros.map(r => r.mg);
+          chartInstance.data.datasets[2].data = registros.map(r => r.activacionMotor);
+          chartInstance.update();
         }
+      } else {
+        const val1 = document.getElementById('val1');
+        const val2 = document.getElementById('val2');
+        const val3 = document.getElementById('val3');
 
-        rowsHtml += `
-          <tr>
-            <td><strong>${fecha}</strong></td>
-            <td>${data.flex !== undefined ? data.flex : '--'}</td>
-            <td>${data.mg !== undefined ? data.mg : '--'}</td>
-            <td>${data.variableDia !== undefined ? data.variableDia : '--'}</td>
-          </tr>
-        `;
-      });
+        if (val1) val1.innerText = '--';
+        if (val2) val2.innerText = '--';
+        if (val3) val3.innerText = '--';
 
-      tableBody.innerHTML = rowsHtml;
-    })
-    .catch((error) => {
-      console.error("Error al cargar historial: ", error);
-      tableBody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: #ef4444;">Error al obtener datos.</td></tr>`;
-    });
-}
-
-// Función para iniciar sesión o registrarse con Google
-function loginConGoogle() {
-  const provider = new firebase.auth.GoogleAuthProvider();
-  const errorMsg = document.getElementById('error-message');
-  
-  if (errorMsg) errorMsg.style.display = 'none';
-
-  auth.signInWithPopup(provider)
-    .then((result) => {
-      const user = result.user;
-      
-      // Registrar/actualizar documento del usuario en Firestore para que el Admin lo pueda ver
-      return db.collection('usuarios').doc(user.uid).set({
-        email: user.email,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp()
-      }, { merge: true });
-    })
-    .catch((error) => {
-      console.error("Error al iniciar sesión con Google: ", error);
-      if (errorMsg) {
-        errorMsg.innerText = "Error al conectar con Google: " + error.message;
-        errorMsg.style.display = 'block';
+        if (chartInstance) {
+          chartInstance.data.labels = [];
+          chartInstance.data.datasets.forEach(ds => ds.data = []);
+          chartInstance.update();
+        }
       }
+
+      renderizarTablaHistorial(registros);
+    }, (error) => {
+      console.error("Error al obtener lecturas en tiempo real: ", error);
     });
 }
 
-// ==================== LÓGICA DE CONEXIÓN BLUETOOTH ====================
-let portBT = null;
-let readerBT = null;
-
+// ==================== CONEXIÓN BLUETOOTH (ESP32 SIMULADO) ====================
 async function conectarBluetooth() {
   const btn = document.getElementById('btn-bluetooth');
+  if (!btn) return;
 
-  // Verificar soporte de Web Serial API en el navegador (Chrome/Edge)
   if (!("serial" in navigator)) {
-    alert("Tu navegador no soporta la conexión Serial/Bluetooth. Utiliza Google Chrome o Microsoft Edge.");
+    alert("Tu navegador no soporta Web Serial API. Utiliza Google Chrome o Microsoft Edge.");
     return;
   }
 
   try {
-    // Abrir ventana emergente para seleccionar el puerto/dispositivo ESP32
     portBT = await navigator.serial.requestPort();
     await portBT.open({ baudRate: 115200 });
 
@@ -428,6 +361,7 @@ async function conectarBluetooth() {
     btn.style.backgroundColor = "#ef4444";
     btn.onclick = desconectarBluetooth;
 
+    console.log("ESP32 conectado vía Bluetooth (Modo Simulación Activo).");
     leerDatosBluetooth();
   } catch (error) {
     console.error("Error al conectar por Bluetooth: ", error);
@@ -439,59 +373,14 @@ async function leerDatosBluetooth() {
   const readableStreamClosed = portBT.readable.pipeTo(textDecoder.writable);
   readerBT = textDecoder.readable.getReader();
 
-  let lineBuffer = "";
-
   while (true) {
     const { value, done } = await readerBT.read();
     if (done) {
       readerBT.releaseLock();
       break;
     }
-    
-    lineBuffer += value;
-    const lines = lineBuffer.split("\n");
-    lineBuffer = lines.pop();
-
-    for (const line of lines) {
-      const mensaje = line.trim();
-
-      // Detectar mensajes de calibración
-      if (mensaje === "INICIO_CALIBRACION") {
-        console.log("⚙️ El ESP32 ha iniciado la secuencia de calibración.");
-        continue;
-      }
-      
-      if (mensaje === "FIN_CALIBRACION") {
-        alert("✅ ¡Calibración completada y guardada en la memoria Flash del ESP32!");
-        continue;
-      }
-
-      // Procesar datos de lecturas normales (flex,emg,variableDia)
-      const datos = mensaje.split(",");
-      if (datos.length === 3) {
-        const flexVal = parseFloat(datos[0]);
-        const mgVal = parseFloat(datos[1]);
-        const varDiaVal = parseFloat(datos[2]);
-
-        guardarLecturaBluetooth(flexVal, mgVal, varDiaVal);
-      }
-    }
+    // Mantiene la conexión Bluetooth abierta pero OMITE el procesamiento/guardado de lecturas físicas
   }
-}
-
-function guardarLecturaBluetooth(flex, mg, varDia) {
-  if (!targetUserId) return;
-
-  const lectura = {
-    userId: targetUserId,
-    flex: flex,
-    mg: mg,
-    variableDia: varDia,
-    timestamp: firebase.firestore.FieldValue.serverTimestamp()
-  };
-
-  db.collection('lecturas').add(lectura)
-    .catch((err) => console.error("Error al guardar lectura por Bluetooth: ", err));
 }
 
 async function desconectarBluetooth() {
@@ -503,27 +392,20 @@ async function desconectarBluetooth() {
   }
 
   const btn = document.getElementById('btn-bluetooth');
-  btn.innerText = "🔵 Conectar ESP32 (Bluetooth)";
-  btn.style.backgroundColor = "#2563eb";
-  btn.onclick = conectarBluetooth;
+  if (btn) {
+    btn.innerText = "🔵 Conectar ESP32 (Bluetooth)";
+    btn.style.backgroundColor = "#2563eb";
+    btn.onclick = conectarBluetooth;
+  }
 }
 
-// ==================== ENVIAR COMANDO DE CALIBRACIÓN ====================
 async function enviarComandoCalibrar() {
   if (!portBT || !portBT.writable) {
     alert("Primero debes conectar el ESP32 por Bluetooth.");
     return;
   }
 
-  const confirmacion = confirm(
-    "Iniciando secuencia de calibración:\n\n" +
-    "1. Tendrás 5 seg para relajar el cuello.\n" +
-    "2. 3 seg para hacer fuerza máxima hacia atrás.\n" +
-    "3. 3 seg para mantener la cabeza recta.\n" +
-    "4. 3 seg para mirar hacia abajo al máximo.\n\n" +
-    "¿Deseas comenzar ahora?"
-  );
-
+  const confirmacion = confirm("¿Deseas iniciar la secuencia de calibración simulada?");
   if (!confirmacion) return;
 
   try {
@@ -531,21 +413,16 @@ async function enviarComandoCalibrar() {
     const writableStreamClosed = textEncoder.readable.pipeTo(portBT.writable);
     const writer = textEncoder.writable.getWriter();
 
-    // Enviar el comando exacto que espera el ESP32
     await writer.write("calibrar\n");
     writer.releaseLock();
 
-    console.log("Comando 'calibrar' enviado al ESP32.");
-    alert("Calibración iniciada en el ESP32. Sigue las instrucciones del dispositivo.");
+    alert("Secuencia de calibración activada.");
   } catch (error) {
     console.error("Error al enviar el comando de calibración: ", error);
-    alert("No se pudo enviar el comando por Bluetooth.");
   }
 }
 
-
-// ==================== LÓGICA DE SIMULACIÓN Y GUARDADO ====================
-
+// ==================== LÓGICA DE SIMULACIÓN WEB (ADMINISTRADOR) ====================
 function simularLectura(estado) {
   if (!targetUserId) {
     alert("Por favor selecciona un usuario para enviarle la simulación.");
@@ -567,66 +444,101 @@ function simularLectura(estado) {
     rawEMG = Math.floor(Math.random() * (639 - 100 + 1)) + 100;
   }
 
-  // CÁLCULO DE ÁNGULO Y PORCENTAJE
-  // Mapeo Flex: 3200 (0°) a 800 (90°)
   let flexVal = ((3200 - rawFlex) / (3200 - 800)) * 90;
   flexVal = Math.max(0, Math.min(90, flexVal));
 
-  // Mapeo EMG: 100 (0%) a 1500 (100%)
   let mgVal = ((rawEMG - 100) / (1500 - 100)) * 100;
   mgVal = Math.max(0, Math.min(100, mgVal));
 
-  // EVALUACIÓN DE ACTIVACIÓN DEL MOTOR
-  // Se activa solo si sobrepasa los rangos límites (Flexor doblado < 1600 Y EMG >= 640)
+  // ACTIVACIÓN DEL MOTOR: Se activa si rawFlex < 1600 Y rawEMG >= 640
   let activacionMotor = (rawFlex < 1600 && rawEMG >= 640) ? 1 : 0;
 
-  // FECHA SIN HORA (YYYY-MM-DD)
+  guardarLecturaEnFirestore(parseFloat(flexVal.toFixed(1)), parseFloat(mgVal.toFixed(1)), activacionMotor);
+}
+
+// Guardado en Firestore (formato YYYY-MM-DD sin hora)
+function guardarLecturaEnFirestore(flex, mg, activacionMotor) {
+  if (!targetUserId) return;
+
   const hoy = new Date();
   const fechaSinHora = hoy.toISOString().split('T')[0];
 
-  // Documento para Firestore
   const lectura = {
     userId: targetUserId,
-    flex: parseFloat(flexVal.toFixed(1)),
-    mg: parseFloat(mgVal.toFixed(1)),
+    flex: flex,
+    mg: mg,
     activacionMotor: activacionMotor,
     fecha: fechaSinHora
   };
 
   db.collection('lecturas').add(lectura)
     .then((docRef) => {
-      console.log("Lectura simulada registrada con ID:", docRef.id);
+      console.log("Lectura simulada registrada en Firestore con ID:", docRef.id);
     })
     .catch((err) => console.error("Error al guardar en Firestore: ", err));
 }
 
-// ==================== CAMBIO DE USUARIO EN SELECCIÓN ADMIN ====================
-function cambiarUsuarioConsultado(selectedUid) {
-  if (selectedUid) {
-    targetUserId = selectedUid;
-  } else {
-    targetUserId = auth.currentUser ? auth.currentUser.uid : null;
+// 9. Navegación entre Pestañas
+function switchTab(viewId, element) {
+  document.querySelectorAll('.tab-view').forEach(view => view.classList.add('hidden'));
+  const targetView = document.getElementById(viewId);
+  if (targetView) targetView.classList.remove('hidden');
+
+  document.querySelectorAll('.sidebar nav a').forEach(link => link.classList.remove('active'));
+  if (element) element.classList.add('active');
+
+  if (viewId === 'view-history') {
+    cargarHistorialCompleto();
   }
-  escucharLecturasEnTiempoReal();
 }
 
-// ==================== RENDERIZADO DE TABLA HISTORIAL ====================
-function renderizarTablaHistorial(lecturas) {
-  const tablaBody = document.getElementById('tabla-historial-body');
-  if (!tablaBody) return;
+// 10. Cargar Historial Completo y Renderizado
+function cargarHistorialCompleto() {
+  if (!targetUserId) return;
 
-  tablaBody.innerHTML = '';
+  const tableBody = document.getElementById('history-table-body') || document.getElementById('tabla-historial-body');
+  if (!tableBody) return;
+
+  tableBody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Cargando registros...</td></tr>`;
+
+  db.collection('lecturas')
+    .where('userId', '==', targetUserId)
+    .limit(50)
+    .get()
+    .then((querySnapshot) => {
+      const lecturas = [];
+      querySnapshot.forEach((doc) => {
+        lecturas.push(doc.data());
+      });
+      renderizarTablaHistorial(lecturas);
+    })
+    .catch((error) => {
+      console.error("Error al cargar historial: ", error);
+      tableBody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: #ef4444;">Error al obtener datos.</td></tr>`;
+    });
+}
+
+function renderizarTablaHistorial(lecturas) {
+  const tableBody = document.getElementById('history-table-body') || document.getElementById('tabla-historial-body');
+  if (!tableBody) return;
+
+  if (!lecturas || lecturas.length === 0) {
+    tableBody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">No hay lecturas registradas para este usuario.</td></tr>`;
+    return;
+  }
+
+  tableBody.innerHTML = '';
 
   lecturas.forEach((item) => {
     const fechaTexto = item.fecha || "Sin fecha";
 
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td>${fechaTexto}</td>
-      <td>${item.flex}°</td>
-      <td>${item.mg}%</td>
+      <td><strong>${fechaTexto}</strong></td>
+      <td>${item.flex !== undefined ? `${item.flex}°` : '--'}</td>
+      <td>${item.mg !== undefined ? `${item.mg}%` : '--'}</td>
       <td>${item.activacionMotor === 1 ? '🟢 Activado (1)' : '⚪ Apagado (0)'}</td>
     `;
-    tablaBody.appendChild(tr);
+    tableBody.appendChild(tr);
   });
 }
