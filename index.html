@@ -87,26 +87,25 @@
         <div class="header">
           <div>
             <h2>Panel de Control</h2>
-            <p class="user-info">Usuario: <span id="user-display">Cargando...</span></p>
+            <p class="user-info">Usuario activo: <span id="user-display">Cargando...</span></p>
           </div>
-          
-          <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+
+          <div style="display: flex; gap: 0.8rem; align-items: center; flex-wrap: wrap;">
             <!-- Selector Admin -->
             <div id="admin-selector-container" class="hidden" style="display: flex; align-items: center; gap: 0.5rem;">
-              <label for="select-user" style="font-size: 0.85rem; font-weight: 600;">Ver datos de:</label>
+              <label for="select-user" style="font-size: 0.85rem; font-weight: 600;">Simular para:</label>
               <select id="select-user" onchange="cambiarUsuarioConsultado(this.value)" style="padding: 0.5rem 0.8rem; border-radius: 6px; border: 1px solid var(--border); outline: none;">
                 <option value="">Cargando usuarios...</option>
               </select>
             </div>
 
-            <!-- BOTÓN CONEXIÓN BLUETOOTH -->
-            <button id="btn-bluetooth" class="btn" style="width: auto; padding: 0.6rem 1.2rem; background-color: #2563eb;" onclick="conectarBluetooth()">
-              🔵 Conectar ESP32 (Bluetooth)
+            <!-- BOTONES DE SIMULACIÓN -->
+            <button class="btn" style="width: auto; padding: 0.6rem 1.2rem; background-color: #ef4444; color: #ffffff;" onclick="simularLectura('flexionado')">
+              💪 Flexionado
             </button>
 
-            <!-- Botón calibración -->
-            <button id="btn-calibrar" class="btn" style="width: auto; padding: 0.6rem 1.2rem; background-color: #d97706; color: #ffffff;" onclick="enviarComandoCalibrar()">
-              ⚙️ Calibrar ESP32
+            <button class="btn" style="width: auto; padding: 0.6rem 1.2rem; background-color: #10b981; color: #ffffff;" onclick="simularLectura('recto')">
+              🧍 Recto
             </button>
           </div>
         </div>

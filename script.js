@@ -542,3 +542,92 @@ async function enviarComandoCalibrar() {
     alert("No se pudo enviar el comando por Bluetooth.");
   }
 }
+
+let targetUserId = null;
+
+// ==================== LÓGICA DE SIMULACIÓN Y GUARDADO ====================
+
+function simularLectura(estado) {
+  if (!targetUserId) {
+    alert("Por favor selecciona un usuario para enviarle la simulación.");
+    return;
+  }
+
+  let rawFlex = 0;
+  let rawEMG = 0;
+
+  if (estado === 'flexionado') {
+    // Flexor doblado (< 1600)
+    rawFlex = Math.floor(Math.random() * (1599 - 800 + 1)) + 800;
+    // EMG Contracción (>= 640)
+    rawEMG = Math.floor(Math.random() * (1500 - 640 + 1)) + 640;
+  } else if (estado === 'recto') {
+    // Flexor recto (>= 1600)
+    rawFlex = Math.floor(Math.random() * (3200 - 1600 + 1)) + 1600;
+    // EMG Relajado (< 640)
+    rawEMG = Math.floor(Math.random() * (639 - 100 + 1)) + 100;
+  }
+
+  // CÁLCULO DE ÁNGULO Y PORCENTAJE
+  // Mapeo Flex: 3200 (0°) a 800 (90°)
+  let flexVal = ((3200 - rawFlex) / (3200 - 800)) * 90;
+  flexVal = Math.max(0, Math.min(90, flexVal));
+
+  // Mapeo EMG: 100 (0%) a 1500 (100%)
+  let mgVal = ((rawEMG - 100) / (1500 - 100)) * 100;
+  mgVal = Math.max(0, Math.min(100, mgVal));
+
+  // EVALUACIÓN DE ACTIVACIÓN DEL MOTOR
+  // Se activa solo si sobrepasa los rangos límites (Flexor doblado < 1600 Y EMG >= 640)
+  let activacionMotor = (rawFlex < 1600 && rawEMG >= 640) ? 1 : 0;
+
+  // FECHA SIN HORA (YYYY-MM-DD)
+  const hoy = new Date();
+  const fechaSinHora = hoy.toISOString().split('T')[0];
+
+  // Documento para Firestore
+  const lectura = {
+    userId: targetUserId,
+    flex: parseFloat(flexVal.toFixed(1)),
+    mg: parseFloat(mgVal.toFixed(1)),
+    activacionMotor: activacionMotor,
+    fecha: fechaSinHora
+  };
+
+  db.collection('lecturas').add(lectura)
+    .then((docRef) => {
+      console.log("Lectura simulada registrada con ID:", docRef.id);
+    })
+    .catch((err) => console.error("Error al guardar en Firestore: ", err));
+}
+
+// ==================== CAMBIO DE USUARIO EN SELECCIÓN ADMIN ====================
+function cambiarUsuarioConsultado(selectedUid) {
+  if (selectedUid) {
+    targetUserId = selectedUid;
+  } else {
+    targetUserId = auth.currentUser ? auth.currentUser.uid : null;
+  }
+  escucharLecturasEnTiempoReal();
+}
+
+// ==================== RENDERIZADO DE TABLA HISTORIAL ====================
+function renderizarTablaHistorial(lecturas) {
+  const tablaBody = document.getElementById('tabla-historial-body');
+  if (!tablaBody) return;
+
+  tablaBody.innerHTML = '';
+
+  lecturas.forEach((item) => {
+    const fechaTexto = item.fecha || "Sin fecha";
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${fechaTexto}</td>
+      <td>${item.flex}°</td>
+      <td>${item.mg}%</td>
+      <td>${item.activacionMotor === 1 ? '🟢 Activado (1)' : '⚪ Apagado (0)'}</td>
+    `;
+    tablaBody.appendChild(tr);
+  });
+}
