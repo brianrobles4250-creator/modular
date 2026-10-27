@@ -435,6 +435,7 @@ async function enviarComandoCalibrar() {
 }
 
 // ==================== LÓGICA DE SIMULACIÓN WEB (ADMINISTRADOR) ====================
+// LÓGICA DE SIMULACIÓN WEB (6 ESTADOS PROGRESIVOS)
 function simularLectura(estado) {
   const selectElement = document.getElementById('select-user');
   
@@ -452,38 +453,75 @@ function simularLectura(estado) {
   let rawFlex = 0;
   let rawEMG = 0;
 
-  if (estado === 'flexionado') {
-    rawFlex = Math.floor(Math.random() * (1599 - 800 + 1)) + 800;
-    rawEMG = Math.floor(Math.random() * (1500 - 640 + 1)) + 640;
-  } else if (estado === 'recto') {
-    rawFlex = Math.floor(Math.random() * (3200 - 1600 + 1)) + 1600;
-    rawEMG = Math.floor(Math.random() * (639 - 100 + 1)) + 100;
+  switch (estado) {
+    case 'critico':
+      // Flexión severa / crítica (80° a 90°)
+      rawFlex = Math.floor(Math.random() * (1066 - 800 + 1)) + 800;
+      rawEMG = Math.floor(Math.random() * (1500 - 1200 + 1)) + 1200;
+      break;
+
+    case 'muy_flexionado':
+      // Flexión pronunciada (70° a 80°)
+      rawFlex = Math.floor(Math.random() * (1333 - 1067 + 1)) + 1067;
+      rawEMG = Math.floor(Math.random() * (1199 - 900 + 1)) + 900;
+      break;
+
+    case 'poco_flexionado':
+      // Flexión leve / en el límite (60° a 70°)
+      rawFlex = Math.floor(Math.random() * (1599 - 1334 + 1)) + 1334;
+      rawEMG = Math.floor(Math.random() * (899 - 640 + 1)) + 640;
+      break;
+
+    case 'poco_recto':
+      // Desviación ligera (40° a 60°)
+      rawFlex = Math.floor(Math.random() * (2133 - 1600 + 1)) + 1600;
+      rawEMG = Math.floor(Math.random() * (639 - 450 + 1)) + 450;
+      break;
+
+    case 'recto':
+      // Buena postura (20° a 40°)
+      rawFlex = Math.floor(Math.random() * (2666 - 2134 + 1)) + 2134;
+      rawEMG = Math.floor(Math.random() * (449 - 250 + 1)) + 250;
+      break;
+
+    case 'muy_recto':
+      // Postura excelente (0° a 20°)
+      rawFlex = Math.floor(Math.random() * (3200 - 2667 + 1)) + 2667;
+      rawEMG = Math.floor(Math.random() * (249 - 100 + 1)) + 100;
+      break;
+
+    default:
+      console.warn("Estado de simulación no reconocido.");
+      return;
   }
 
+  // Mapeo preciso a Ángulos (Flex: 3200 = 0°, 800 = 90°)
   let flexVal = ((3200 - rawFlex) / (3200 - 800)) * 90;
   flexVal = Math.max(0, Math.min(90, flexVal));
 
+  // Mapeo preciso a Porcentaje (EMG: 100 = 0%, 1500 = 100%)
   let mgVal = ((rawEMG - 100) / (1500 - 100)) * 100;
   mgVal = Math.max(0, Math.min(100, mgVal));
 
+  // EVALUACIÓN DE ACTIVACIÓN DEL MOTOR (Activo únicamente en estados flexionados)
   let activacionMotor = (rawFlex < 1600 && rawEMG >= 640) ? 1 : 0;
 
+  // Fecha visible (YYYY-MM-DD)
   const hoy = new Date();
   const fechaSinHora = hoy.toISOString().split('T')[0];
 
-  // Documento enviado a Firestore
   const lectura = {
     userId: targetUserId,
     flex: parseFloat(flexVal.toFixed(1)),
     mg: parseFloat(mgVal.toFixed(1)),
     activacionMotor: activacionMotor,
-    fecha: fechaSinHora,          // 👈 Cadena visible (YYYY-MM-DD)
-    creadoEn: Date.now()           // 👈 Campo numérico invisible para ordenar cronológicamente
+    fecha: fechaSinHora,
+    creadoEn: Date.now() // Permite ordenamiento estricto por milisegundos en Firestore
   };
 
   db.collection('lecturas').add(lectura)
     .then((docRef) => {
-      console.log(`Lectura enviada con éxito a ${targetUserId} | ID:`, docRef.id);
+      console.log(`Lectura [${estado}] registrada con éxito para ${targetUserId} | ID:`, docRef.id);
     })
     .catch((err) => console.error("Error al guardar en Firestore: ", err));
 }

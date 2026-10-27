@@ -105,13 +105,30 @@
             </div>
 
             <!-- BOTONES DE SIMULACIÓN (Visibles únicamente para el Administrador) -->
-            <div id="admin-simulation-buttons" class="hidden" style="display: flex; gap: 0.8rem;">
-              <button class="btn" style="width: auto; padding: 0.6rem 1.2rem; background-color: #ef4444; color: #ffffff;" onclick="simularLectura('flexionado')">
-                💪 Flexionado
+            <!-- BOTONES DE SIMULACIÓN EN 6 NIVELES (Visibles únicamente para el Administrador) -->
+            <div id="admin-simulation-buttons" class="hidden" style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+              <button class="btn" style="width: auto; padding: 0.5rem 0.8rem; background-color: #991b1b; color: #ffffff; font-size: 0.8rem;" onclick="simularLectura('critico')">
+                🚨 Crítico
               </button>
 
-              <button class="btn" style="width: auto; padding: 0.6rem 1.2rem; background-color: #10b981; color: #ffffff;" onclick="simularLectura('recto')">
+              <button class="btn" style="width: auto; padding: 0.5rem 0.8rem; background-color: #dc2626; color: #ffffff; font-size: 0.8rem;" onclick="simularLectura('muy_flexionado')">
+                💪 Muy Flexionado
+              </button>
+
+              <button class="btn" style="width: auto; padding: 0.5rem 0.8rem; background-color: #f97316; color: #ffffff; font-size: 0.8rem;" onclick="simularLectura('poco_flexionado')">
+                🤏 Poco Flexionado
+              </button>
+
+              <button class="btn" style="width: auto; padding: 0.5rem 0.8rem; background-color: #eab308; color: #ffffff; font-size: 0.8rem;" onclick="simularLectura('poco_recto')">
+                🚶 Poco Recto
+              </button>
+
+              <button class="btn" style="width: auto; padding: 0.5rem 0.8rem; background-color: #3b82f6; color: #ffffff; font-size: 0.8rem;" onclick="simularLectura('recto')">
                 🧍 Recto
+              </button>
+
+              <button class="btn" style="width: auto; padding: 0.5rem 0.8rem; background-color: #10b981; color: #ffffff; font-size: 0.8rem;" onclick="simularLectura('muy_recto')">
+                ✨ Muy Recto
               </button>
             </div>
           </div>
