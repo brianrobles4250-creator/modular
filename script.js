@@ -543,7 +543,6 @@ async function enviarComandoCalibrar() {
   }
 }
 
-let targetUserId = null;
 
 // ==================== LÓGICA DE SIMULACIÓN Y GUARDADO ====================
 
