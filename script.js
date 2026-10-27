@@ -429,7 +429,17 @@ async function enviarComandoCalibrar() {
 }
 
 // ==================== LÓGICA DE SIMULACIÓN WEB (ADMINISTRADOR) ====================
+// LÓGICA DE SIMULACIÓN WEB (Garantiza el envío al usuario seleccionado)
 function simularLectura(estado) {
+  const selectElement = document.getElementById('select-user');
+  
+  // 1. Obtener el ID del usuario seleccionado en el selector (o usar el logueado por defecto)
+  if (selectElement && selectElement.value) {
+    targetUserId = selectElement.value;
+  } else if (auth.currentUser) {
+    targetUserId = auth.currentUser.uid;
+  }
+
   if (!targetUserId) {
     alert("Por favor selecciona un usuario para enviarle la simulación.");
     return;
@@ -456,10 +466,26 @@ function simularLectura(estado) {
   let mgVal = ((rawEMG - 100) / (1500 - 100)) * 100;
   mgVal = Math.max(0, Math.min(100, mgVal));
 
-  // ACTIVACIÓN DEL MOTOR: Se activa si rawFlex < 1600 Y rawEMG >= 640
+  // EVALUACIÓN DE ACTIVACIÓN DEL MOTOR
   let activacionMotor = (rawFlex < 1600 && rawEMG >= 640) ? 1 : 0;
 
-  guardarLecturaEnFirestore(parseFloat(flexVal.toFixed(1)), parseFloat(mgVal.toFixed(1)), activacionMotor);
+  // FECHA SIN HORA (YYYY-MM-DD)
+  const hoy = new Date();
+  const fechaSinHora = hoy.toISOString().split('T')[0];
+
+  const lectura = {
+    userId: targetUserId, // 👈 Se garantiza el UID exacto seleccionado
+    flex: parseFloat(flexVal.toFixed(1)),
+    mg: parseFloat(mgVal.toFixed(1)),
+    activacionMotor: activacionMotor,
+    fecha: fechaSinHora
+  };
+
+  db.collection('lecturas').add(lectura)
+    .then((docRef) => {
+      console.log(`Lectura enviada con éxito a ${targetUserId} | ID:`, docRef.id);
+    })
+    .catch((err) => console.error("Error al guardar en Firestore: ", err));
 }
 
 // Guardado en Firestore (formato YYYY-MM-DD sin hora)
