@@ -298,14 +298,19 @@ function escucharLecturasEnTiempoReal() {
   if (!targetUserId) return;
   if (unsubscribeLecturas) unsubscribeLecturas();
 
+  // Consulta ordenada cronológicamente por 'creadoEn'
   unsubscribeLecturas = db.collection('lecturas')
     .where('userId', '==', targetUserId)
-    .limit(10)
+    .orderBy('creadoEn', 'desc') // 👈 Recupera primero los más nuevos
+    .limit(10)                   // 👈 Obtiene solo las 10 lecturas más recientes
     .onSnapshot((snapshot) => {
       const registros = [];
       snapshot.forEach((doc) => {
-        registros.push(doc.data());
+        registros.push({ id: doc.id, ...doc.data() });
       });
+
+      // Invertir el arreglo para graficar de izquierda a derecha (pasado -> presente)
+      registros.reverse();
 
       if (registros.length > 0) {
         const ultimo = registros[registros.length - 1];
@@ -316,8 +321,9 @@ function escucharLecturasEnTiempoReal() {
 
         if (val1) val1.innerText = ultimo.flex !== undefined ? `${ultimo.flex}°` : '--';
         if (val2) val2.innerText = ultimo.mg !== undefined ? `${ultimo.mg}%` : '--';
-        if (val3) val3.innerText = ultimo.activacionMotor === 1 ? '🟢 Activado' : '⚪ Apagado';
+        if (val3) val3.innerText = ultimo.activacionMotor === 1 ? '🟢 Activado (1)' : '⚪ Apagado (0)';
 
+        // Se muestra la propiedad 'fecha' sin hora en las etiquetas
         const labels = registros.map(r => r.fecha || 'Sin fecha');
 
         if (chartInstance) {
@@ -429,11 +435,9 @@ async function enviarComandoCalibrar() {
 }
 
 // ==================== LÓGICA DE SIMULACIÓN WEB (ADMINISTRADOR) ====================
-// LÓGICA DE SIMULACIÓN WEB (Garantiza el envío al usuario seleccionado)
 function simularLectura(estado) {
   const selectElement = document.getElementById('select-user');
   
-  // 1. Obtener el ID del usuario seleccionado en el selector (o usar el logueado por defecto)
   if (selectElement && selectElement.value) {
     targetUserId = selectElement.value;
   } else if (auth.currentUser) {
@@ -449,14 +453,10 @@ function simularLectura(estado) {
   let rawEMG = 0;
 
   if (estado === 'flexionado') {
-    // Flexor doblado (< 1600)
     rawFlex = Math.floor(Math.random() * (1599 - 800 + 1)) + 800;
-    // EMG Contracción (>= 640)
     rawEMG = Math.floor(Math.random() * (1500 - 640 + 1)) + 640;
   } else if (estado === 'recto') {
-    // Flexor recto (>= 1600)
     rawFlex = Math.floor(Math.random() * (3200 - 1600 + 1)) + 1600;
-    // EMG Relajado (< 640)
     rawEMG = Math.floor(Math.random() * (639 - 100 + 1)) + 100;
   }
 
@@ -466,19 +466,19 @@ function simularLectura(estado) {
   let mgVal = ((rawEMG - 100) / (1500 - 100)) * 100;
   mgVal = Math.max(0, Math.min(100, mgVal));
 
-  // EVALUACIÓN DE ACTIVACIÓN DEL MOTOR
   let activacionMotor = (rawFlex < 1600 && rawEMG >= 640) ? 1 : 0;
 
-  // FECHA SIN HORA (YYYY-MM-DD)
   const hoy = new Date();
   const fechaSinHora = hoy.toISOString().split('T')[0];
 
+  // Documento enviado a Firestore
   const lectura = {
-    userId: targetUserId, // 👈 Se garantiza el UID exacto seleccionado
+    userId: targetUserId,
     flex: parseFloat(flexVal.toFixed(1)),
     mg: parseFloat(mgVal.toFixed(1)),
     activacionMotor: activacionMotor,
-    fecha: fechaSinHora
+    fecha: fechaSinHora,          // 👈 Cadena visible (YYYY-MM-DD)
+    creadoEn: Date.now()           // 👈 Campo numérico invisible para ordenar cronológicamente
   };
 
   db.collection('lecturas').add(lectura)
@@ -535,6 +535,7 @@ function cargarHistorialCompleto() {
 
   db.collection('lecturas')
     .where('userId', '==', targetUserId)
+    .orderBy('creadoEn', 'desc') // 👈 Ordena el historial del más reciente al más antiguo
     .limit(50)
     .get()
     .then((querySnapshot) => {
