@@ -39,14 +39,20 @@ auth.onAuthStateChanged((user) => {
     const adminSelector = document.getElementById('admin-selector-container');
     const adminButtons = document.getElementById('admin-simulation-buttons');
 
-    // Verificar si el usuario es el administrador
-    if (user.email === ADMIN_EMAIL) {
+    // Comprobación de correo admin (sin distinguir mayúsculas/minúsculas)
+    const esAdminPorEmail = user.email && (user.email.trim().toLowerCase() === ADMIN_EMAIL.trim().toLowerCase());
+
+    if (esAdminPorEmail) {
+      // MOSTRAR AMBOS ELEMENTOS AL ADMINISTRADOR
       if (adminSelector) adminSelector.classList.remove('hidden');
       if (adminButtons) adminButtons.classList.remove('hidden');
+      
       cargarListaUsuariosAdmin(user.uid);
     } else {
+      // OCULTAR AMBOS ELEMENTOS A USUARIOS NORMALES
       if (adminSelector) adminSelector.classList.add('hidden');
       if (adminButtons) adminButtons.classList.add('hidden');
+      
       targetUserId = user.uid;
       escucharLecturasEnTiempoReal();
     }

@@ -91,6 +91,11 @@
           </div>
 
           <div style="display: flex; gap: 0.8rem; align-items: center; flex-wrap: wrap;">
+            <!-- Conexión Bluetooth con ESP32 -->
+            <button id="btn-bluetooth" class="btn" style="width: auto; padding: 0.6rem 1.2rem; background-color: #2563eb; color: #ffffff;" onclick="conectarBluetooth()">
+              🔵 Conectar ESP32 (Bluetooth)
+            </button>
+
             <!-- Selector Admin -->
             <div id="admin-selector-container" class="hidden" style="display: flex; align-items: center; gap: 0.5rem;">
               <label for="select-user" style="font-size: 0.85rem; font-weight: 600;">Simular para:</label>
@@ -99,7 +104,7 @@
               </select>
             </div>
 
-            <!-- BOTONES DE SIMULACIÓN (Ocultos por defecto para usuarios normales) -->
+            <!-- BOTONES DE SIMULACIÓN (Visibles únicamente para el Administrador) -->
             <div id="admin-simulation-buttons" class="hidden" style="display: flex; gap: 0.8rem;">
               <button class="btn" style="width: auto; padding: 0.6rem 1.2rem; background-color: #ef4444; color: #ffffff;" onclick="simularLectura('flexionado')">
                 💪 Flexionado
@@ -123,7 +128,7 @@
             <div class="value" id="val2">--</div>
           </div>
           <div class="card-metric">
-            <h4>Variable del día</h4>
+            <h4>Activación del motor</h4>
             <div class="value" id="val3">--</div>
           </div>
         </div>
@@ -154,13 +159,13 @@
             <table class="data-table">
               <thead>
                 <tr>
-                  <th>Fecha y Hora</th>
+                  <th>Fecha</th>
                   <th>Flex</th>
                   <th>MG</th>
-                  <th>Variable del Día</th>
+                  <th>Activación del motor</th>
                 </tr>
               </thead>
-              <tbody id="history-table-body">
+              <tbody id="tabla-historial-body">
                 <tr>
                   <td colspan="4" style="text-align: center; color: var(--text-muted);">Cargando registros...</td>
                 </tr>
