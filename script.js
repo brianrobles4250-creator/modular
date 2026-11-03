@@ -355,7 +355,7 @@ function escucharLecturasEnTiempoReal() {
     });
 }
 
-// ==================== CONEXIÓN BLUETOOTH (ESP32 SIMULADO) ====================
+// ==================== CONEXIÓN BLUETOOTH (ESP32) ====================
 async function conectarBluetooth() {
   const btn = document.getElementById('btn-bluetooth');
   if (!btn) return;
@@ -373,7 +373,7 @@ async function conectarBluetooth() {
     btn.style.backgroundColor = "#ef4444";
     btn.onclick = desconectarBluetooth;
 
-    console.log("ESP32 conectado vía Bluetooth (Modo Simulación Activo).");
+    console.log("ESP32 conectado vía Bluetooth.");
     leerDatosBluetooth();
   } catch (error) {
     console.error("Error al conectar por Bluetooth: ", error);
@@ -391,7 +391,7 @@ async function leerDatosBluetooth() {
       readerBT.releaseLock();
       break;
     }
-    // Mantiene la conexión Bluetooth abierta pero OMITE el procesamiento/guardado de lecturas físicas
+    // Mantiene la conexión Bluetooth abierta
   }
 }
 
@@ -411,13 +411,30 @@ async function desconectarBluetooth() {
   }
 }
 
+// Transmitir ordenes de encendido/apagado al ESP32 por Web Serial
+async function enviarComandoMotorBluetooth(encender) {
+  if (!portBT || !portBT.writable) return;
+
+  try {
+    const encoder = new TextEncoder();
+    const writer = portBT.writable.getWriter();
+    const comando = encender ? "MOTOR_ON\n" : "MOTOR_OFF\n";
+    
+    await writer.write(encoder.encode(comando));
+    writer.releaseLock();
+    console.log(`Comando de motor enviado al ESP32: ${comando.trim()}`);
+  } catch (error) {
+    console.error("Error al enviar comando de motor vía Bluetooth: ", error);
+  }
+}
+
 async function enviarComandoCalibrar() {
   if (!portBT || !portBT.writable) {
     alert("Primero debes conectar el ESP32 por Bluetooth.");
     return;
   }
 
-  const confirmacion = confirm("¿Deseas iniciar la secuencia de calibración simulada?");
+  const confirmacion = confirm("¿Deseas iniciar la secuencia de calibración?");
   if (!confirmacion) return;
 
   try {
@@ -434,8 +451,7 @@ async function enviarComandoCalibrar() {
   }
 }
 
-// ==================== LÓGICA DE SIMULACIÓN WEB (ADMINISTRADOR) ====================
-// LÓGICA DE SIMULACIÓN WEB (6 ESTADOS PROGRESIVOS)
+// ==================== LÓGICA DE SIMULACIÓN WEB (6 ESTADOS PROGRESIVOS) ====================
 function simularLectura(estado) {
   const selectElement = document.getElementById('select-user');
   
@@ -506,6 +522,9 @@ function simularLectura(estado) {
   // EVALUACIÓN DE ACTIVACIÓN DEL MOTOR (Activo únicamente en estados flexionados)
   let activacionMotor = (rawFlex < 1600 && rawEMG >= 640) ? 1 : 0;
 
+  // ⚡ Transmitir comando físico al ESP32 si Bluetooth está conectado
+  enviarComandoMotorBluetooth(activacionMotor === 1);
+
   // Fecha visible (YYYY-MM-DD)
   const hoy = new Date();
   const fechaSinHora = hoy.toISOString().split('T')[0];
@@ -522,28 +541,6 @@ function simularLectura(estado) {
   db.collection('lecturas').add(lectura)
     .then((docRef) => {
       console.log(`Lectura [${estado}] registrada con éxito para ${targetUserId} | ID:`, docRef.id);
-    })
-    .catch((err) => console.error("Error al guardar en Firestore: ", err));
-}
-
-// Guardado en Firestore (formato YYYY-MM-DD sin hora)
-function guardarLecturaEnFirestore(flex, mg, activacionMotor) {
-  if (!targetUserId) return;
-
-  const hoy = new Date();
-  const fechaSinHora = hoy.toISOString().split('T')[0];
-
-  const lectura = {
-    userId: targetUserId,
-    flex: flex,
-    mg: mg,
-    activacionMotor: activacionMotor,
-    fecha: fechaSinHora
-  };
-
-  db.collection('lecturas').add(lectura)
-    .then((docRef) => {
-      console.log("Lectura simulada registrada en Firestore con ID:", docRef.id);
     })
     .catch((err) => console.error("Error al guardar en Firestore: ", err));
 }
