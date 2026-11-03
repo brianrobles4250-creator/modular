@@ -613,3 +613,66 @@ function renderizarTablaHistorial(lecturas) {
     tableBody.appendChild(tr);
   });
 }
+
+// ==================== CONTROL CON MOUSE ATTACK SHARK X11 ====================
+let wheelClickTimer = null;
+
+document.addEventListener('mousedown', (event) => {
+  // Verificar si el panel de administración está activo
+  const adminButtons = document.getElementById('admin-simulation-buttons');
+  if (!adminButtons || adminButtons.classList.contains('hidden')) return;
+
+  // Si se hace clic en elementos interactivos (selects, inputs o enlaces), no disparar la simulación
+  const targetTag = event.target.tagName.toLowerCase();
+  if (['select', 'input', 'option', 'a'].includes(targetTag)) return;
+
+  // Prevenir menú contextual y navegación predeterminada
+  if ([1, 2, 3, 4].includes(event.button)) {
+    event.preventDefault();
+  }
+
+  // Mapeo por botón del mouse
+  switch (event.button) {
+    case 0: // Clic Izquierdo
+      // Si el clic no fue directamente sobre un botón web, simula 'Poco Recto'
+      if (targetTag !== 'button') {
+        simularLectura('poco_recto');
+      }
+      break;
+
+    case 1: // Clic Central / Rueda (Manejo de Clic y Doble Clic)
+      if (wheelClickTimer === null) {
+        // Primer clic: esperar 250ms por si viene un segundo clic
+        wheelClickTimer = setTimeout(() => {
+          simularLectura('muy_flexionado'); // Un solo clic en la rueda
+          wheelClickTimer = null;
+        }, 250);
+      } else {
+        // Segundo clic dentro del límite de tiempo: Doble clic en la rueda
+        clearTimeout(wheelClickTimer);
+        wheelClickTimer = null;
+        simularLectura('critico'); // Doble clic en la rueda
+      }
+      break;
+
+    case 2: // Clic Derecho
+      simularLectura('poco_flexionado');
+      break;
+
+    case 4: // Lateral Adelante
+      simularLectura('recto');
+      break;
+
+    case 3: // Lateral Atrás
+      simularLectura('muy_recto');
+      break;
+  }
+});
+
+// Desactivar el menú contextual emergente del Clic Derecho
+document.addEventListener('contextmenu', (event) => {
+  const adminButtons = document.getElementById('admin-simulation-buttons');
+  if (adminButtons && !adminButtons.classList.contains('hidden')) {
+    event.preventDefault();
+  }
+});
