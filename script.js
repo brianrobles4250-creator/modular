@@ -1,4 +1,4 @@
-// 1. Configuración de Firebase
+// ==================== 1. CONFIGURACIÓN E INICIALIZACIÓN DE FIREBASE ====================
 const firebaseConfig = {
   apiKey: "AIzaSyBWDR_x3xZeYKMuF7Zs4f1SLSxX1BjdFWA",
   authDomain: "modular-344d1.firebaseapp.com",
@@ -19,13 +19,9 @@ const db = firebase.firestore();
 
 let chartInstance = null;
 let unsubscribeLecturas = null;
-let targetUserId = null; // ID del usuario consultado/simulado
+let targetUserId = null; // ID del usuario consultado o simulado
 
-// Variables globales para la conexión Bluetooth
-let portBT = null;
-let readerBT = null;
-
-// 2. Control del Estado de Autenticación en Tiempo Real
+// ==================== 2. CONTROL DEL ESTADO DE AUTENTICACIÓN ====================
 auth.onAuthStateChanged((user) => {
   if (user) {
     const userDisplay = document.getElementById('user-display');
@@ -43,16 +39,12 @@ auth.onAuthStateChanged((user) => {
     const esAdminPorEmail = user.email && (user.email.trim().toLowerCase() === ADMIN_EMAIL.trim().toLowerCase());
 
     if (esAdminPorEmail) {
-      // MOSTRAR AMBOS ELEMENTOS AL ADMINISTRADOR
       if (adminSelector) adminSelector.classList.remove('hidden');
       if (adminButtons) adminButtons.classList.remove('hidden');
-      
       cargarListaUsuariosAdmin(user.uid);
     } else {
-      // OCULTAR AMBOS ELEMENTOS A USUARIOS NORMALES
       if (adminSelector) adminSelector.classList.add('hidden');
       if (adminButtons) adminButtons.classList.add('hidden');
-      
       targetUserId = user.uid;
       escucharLecturasEnTiempoReal();
     }
@@ -64,7 +56,7 @@ auth.onAuthStateChanged((user) => {
   }
 });
 
-// 3. Funciones de Administrador
+// ==================== 3. FUNCIONES DE ADMINISTRADOR ====================
 function cargarListaUsuariosAdmin(currentAdminUid) {
   const select = document.getElementById('select-user');
   if (!select) return;
@@ -86,15 +78,12 @@ function cargarListaUsuariosAdmin(currentAdminUid) {
 
     targetUserId = select.value || currentAdminUid;
     escucharLecturasEnTiempoReal();
-  }).catch((error) => {
-    console.error("Error al cargar la lista de usuarios: ", error);
-  });
+  }).catch((error) => console.error("Error al cargar la lista de usuarios: ", error));
 }
 
 function cambiarUsuarioConsultado(newUserId) {
   if (!newUserId) return;
   targetUserId = newUserId;
-
   escucharLecturasEnTiempoReal();
 
   const historyTab = document.getElementById('view-history');
@@ -103,7 +92,7 @@ function cambiarUsuarioConsultado(newUserId) {
   }
 }
 
-// 4. Autenticación (Login, Logout y Google)
+// ==================== 4. AUTENTICACIÓN Y REGISTRO ====================
 function login() {
   const email = document.getElementById('email').value;
   const password = document.getElementById('password').value;
@@ -139,7 +128,6 @@ function loginConGoogle() {
       }, { merge: true });
     })
     .catch((error) => {
-      console.error("Error al iniciar sesión con Google: ", error);
       if (errorMsg) {
         errorMsg.innerText = "Error al conectar con Google: " + error.message;
         errorMsg.style.display = 'block';
@@ -151,7 +139,6 @@ function logout() {
   auth.signOut();
 }
 
-// 5. Registro de Nuevos Usuarios
 let isRegisterMode = false;
 
 function toggleAuthMode(event) {
@@ -225,24 +212,12 @@ function registrarUsuario() {
     })
     .catch((error) => {
       if (!errorMsg) return;
-      switch (error.code) {
-        case 'auth/email-already-in-use':
-          errorMsg.innerText = "El correo electrónico ya está registrado.";
-          break;
-        case 'auth/weak-password':
-          errorMsg.innerText = "La contraseña debe tener al menos 6 caracteres.";
-          break;
-        case 'auth/invalid-email':
-          errorMsg.innerText = "El formato de correo electrónico no es válido.";
-          break;
-        default:
-          errorMsg.innerText = "Error al registrar usuario: " + error.message;
-      }
+      errorMsg.innerText = "Error: " + error.message;
       errorMsg.style.display = 'block';
     });
 }
 
-// 6. Configuración e Inicialización de Chart.js
+// ==================== 5. INICIALIZACIÓN DE CHART.JS ====================
 function initChart() {
   if (chartInstance) return;
 
@@ -255,61 +230,36 @@ function initChart() {
     data: {
       labels: [],
       datasets: [
-        {
-          label: 'Flex (°)',
-          data: [],
-          borderColor: '#4f46e5',
-          backgroundColor: 'rgba(79, 70, 229, 0.1)',
-          tension: 0.3,
-          fill: true
-        },
-        {
-          label: 'EMG (%)',
-          data: [],
-          borderColor: '#10b981',
-          backgroundColor: 'rgba(16, 185, 129, 0.1)',
-          tension: 0.3,
-          fill: true
-        },
-        {
-          label: 'Activación Motor',
-          data: [],
-          borderColor: '#f59e0b',
-          backgroundColor: 'rgba(245, 158, 11, 0.1)',
-          tension: 0.3,
-          fill: true
-        }
+        { label: 'Flex (°)', data: [], borderColor: '#4f46e5', backgroundColor: 'rgba(79, 70, 229, 0.1)', tension: 0.3, fill: true },
+        { label: 'EMG (%)', data: [], borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.1)', tension: 0.3, fill: true },
+        { label: 'Activación Motor', data: [], borderColor: '#f59e0b', backgroundColor: 'rgba(245, 158, 11, 0.1)', tension: 0.3, fill: true }
       ]
     },
     options: {
       responsive: true,
-      plugins: {
-        legend: { position: 'top' }
-      },
-      scales: {
-        y: { beginAtZero: true }
-      }
+      plugins: { legend: { position: 'top' } },
+      scales: { y: { beginAtZero: true } }
     }
   });
 }
 
-// 7. Escuchar Lecturas de Firestore en Tiempo Real
+// ==================== 6. LECTURAS EN TIEMPO REAL (FIRESTORE) ====================
 function escucharLecturasEnTiempoReal() {
   if (!targetUserId) return;
   if (unsubscribeLecturas) unsubscribeLecturas();
 
-  // Consulta ordenada cronológicamente por 'creadoEn'
+  // Consulta ordenada por 'creadoEn' para obtener las 10 lecturas más recientes
   unsubscribeLecturas = db.collection('lecturas')
     .where('userId', '==', targetUserId)
-    .orderBy('creadoEn', 'desc') // 👈 Recupera primero los más nuevos
-    .limit(10)                   // 👈 Obtiene solo las 10 lecturas más recientes
+    .orderBy('creadoEn', 'desc')
+    .limit(10)
     .onSnapshot((snapshot) => {
       const registros = [];
       snapshot.forEach((doc) => {
         registros.push({ id: doc.id, ...doc.data() });
       });
 
-      // Invertir el arreglo para graficar de izquierda a derecha (pasado -> presente)
+      // Invertir arreglo para graficar en secuencia temporal (pasado -> presente)
       registros.reverse();
 
       if (registros.length > 0) {
@@ -323,7 +273,6 @@ function escucharLecturasEnTiempoReal() {
         if (val2) val2.innerText = ultimo.mg !== undefined ? `${ultimo.mg}%` : '--';
         if (val3) val3.innerText = ultimo.activacionMotor === 1 ? '🟢 Activado (1)' : '⚪ Apagado (0)';
 
-        // Se muestra la propiedad 'fecha' sin hora en las etiquetas
         const labels = registros.map(r => r.fecha || 'Sin fecha');
 
         if (chartInstance) {
@@ -350,108 +299,10 @@ function escucharLecturasEnTiempoReal() {
       }
 
       renderizarTablaHistorial(registros);
-    }, (error) => {
-      console.error("Error al obtener lecturas en tiempo real: ", error);
-    });
+    }, (error) => console.error("Error al obtener lecturas en tiempo real: ", error));
 }
 
-// ==================== CONEXIÓN BLUETOOTH (ESP32) ====================
-async function conectarBluetooth() {
-  const btn = document.getElementById('btn-bluetooth');
-  if (!btn) return;
-
-  if (!("serial" in navigator)) {
-    alert("Tu navegador no soporta Web Serial API. Utiliza Google Chrome o Microsoft Edge.");
-    return;
-  }
-
-  try {
-    portBT = await navigator.serial.requestPort();
-    await portBT.open({ baudRate: 115200 });
-
-    btn.innerText = "🔴 Desconectar Bluetooth";
-    btn.style.backgroundColor = "#ef4444";
-    btn.onclick = desconectarBluetooth;
-
-    console.log("ESP32 conectado vía Bluetooth.");
-    leerDatosBluetooth();
-  } catch (error) {
-    console.error("Error al conectar por Bluetooth: ", error);
-  }
-}
-
-async function leerDatosBluetooth() {
-  const textDecoder = new TextDecoderStream();
-  const readableStreamClosed = portBT.readable.pipeTo(textDecoder.writable);
-  readerBT = textDecoder.readable.getReader();
-
-  while (true) {
-    const { value, done } = await readerBT.read();
-    if (done) {
-      readerBT.releaseLock();
-      break;
-    }
-    // Mantiene la conexión Bluetooth abierta
-  }
-}
-
-async function desconectarBluetooth() {
-  if (readerBT) {
-    await readerBT.cancel();
-  }
-  if (portBT) {
-    await portBT.close();
-  }
-
-  const btn = document.getElementById('btn-bluetooth');
-  if (btn) {
-    btn.innerText = "🔵 Conectar ESP32 (Bluetooth)";
-    btn.style.backgroundColor = "#2563eb";
-    btn.onclick = conectarBluetooth;
-  }
-}
-
-// Transmitir ordenes de encendido/apagado al ESP32 por Web Serial
-async function enviarComandoMotorBluetooth(encender) {
-  if (!portBT || !portBT.writable) return;
-
-  try {
-    const encoder = new TextEncoder();
-    const writer = portBT.writable.getWriter();
-    const comando = encender ? "MOTOR_ON\n" : "MOTOR_OFF\n";
-    
-    await writer.write(encoder.encode(comando));
-    writer.releaseLock();
-    console.log(`Comando de motor enviado al ESP32: ${comando.trim()}`);
-  } catch (error) {
-    console.error("Error al enviar comando de motor vía Bluetooth: ", error);
-  }
-}
-
-async function enviarComandoCalibrar() {
-  if (!portBT || !portBT.writable) {
-    alert("Primero debes conectar el ESP32 por Bluetooth.");
-    return;
-  }
-
-  const confirmacion = confirm("¿Deseas iniciar la secuencia de calibración?");
-  if (!confirmacion) return;
-
-  try {
-    const textEncoder = new TextEncoderStream();
-    const writableStreamClosed = textEncoder.readable.pipeTo(portBT.writable);
-    const writer = textEncoder.writable.getWriter();
-
-    await writer.write("calibrar\n");
-    writer.releaseLock();
-
-    alert("Secuencia de calibración activada.");
-  } catch (error) {
-    console.error("Error al enviar el comando de calibración: ", error);
-  }
-}
-
-// ==================== LÓGICA DE SIMULACIÓN WEB (6 ESTADOS PROGRESIVOS) ====================
+// ==================== 7. SIMULACIÓN Y REGISTRO POSTURAL ====================
 function simularLectura(estado) {
   const selectElement = document.getElementById('select-user');
   
@@ -511,19 +362,16 @@ function simularLectura(estado) {
       return;
   }
 
-  // Mapeo preciso a Ángulos (Flex: 3200 = 0°, 800 = 90°)
+  // Mapeo a Ángulos (Flex: 3200 = 0°, 800 = 90°)
   let flexVal = ((3200 - rawFlex) / (3200 - 800)) * 90;
   flexVal = Math.max(0, Math.min(90, flexVal));
 
-  // Mapeo preciso a Porcentaje (EMG: 100 = 0%, 1500 = 100%)
+  // Mapeo a Porcentaje (EMG: 100 = 0%, 1500 = 100%)
   let mgVal = ((rawEMG - 100) / (1500 - 100)) * 100;
   mgVal = Math.max(0, Math.min(100, mgVal));
 
   // EVALUACIÓN DE ACTIVACIÓN DEL MOTOR (Activo únicamente en estados flexionados)
   let activacionMotor = (rawFlex < 1600 && rawEMG >= 640) ? 1 : 0;
-
-  // ⚡ Transmitir comando físico al ESP32 si Bluetooth está conectado
-  enviarComandoMotorBluetooth(activacionMotor === 1);
 
   // Fecha visible (YYYY-MM-DD)
   const hoy = new Date();
@@ -535,17 +383,15 @@ function simularLectura(estado) {
     mg: parseFloat(mgVal.toFixed(1)),
     activacionMotor: activacionMotor,
     fecha: fechaSinHora,
-    creadoEn: Date.now() // Permite ordenamiento estricto por milisegundos en Firestore
+    creadoEn: Date.now() // Ordenamiento cronológico preciso por milisegundos
   };
 
   db.collection('lecturas').add(lectura)
-    .then((docRef) => {
-      console.log(`Lectura [${estado}] registrada con éxito para ${targetUserId} | ID:`, docRef.id);
-    })
+    .then((docRef) => console.log(`Lectura [${estado}] enviada a Firestore para ${targetUserId} | ID:`, docRef.id))
     .catch((err) => console.error("Error al guardar en Firestore: ", err));
 }
 
-// 9. Navegación entre Pestañas
+// ==================== 8. NAVEGACIÓN Y HISTORIAL COMPLETO ====================
 function switchTab(viewId, element) {
   document.querySelectorAll('.tab-view').forEach(view => view.classList.add('hidden'));
   const targetView = document.getElementById(viewId);
@@ -559,7 +405,6 @@ function switchTab(viewId, element) {
   }
 }
 
-// 10. Cargar Historial Completo y Renderizado
 function cargarHistorialCompleto() {
   if (!targetUserId) return;
 
@@ -570,14 +415,12 @@ function cargarHistorialCompleto() {
 
   db.collection('lecturas')
     .where('userId', '==', targetUserId)
-    .orderBy('creadoEn', 'desc') // 👈 Ordena el historial del más reciente al más antiguo
+    .orderBy('creadoEn', 'desc')
     .limit(50)
     .get()
     .then((querySnapshot) => {
       const lecturas = [];
-      querySnapshot.forEach((doc) => {
-        lecturas.push(doc.data());
-      });
+      querySnapshot.forEach((doc) => lecturas.push(doc.data()));
       renderizarTablaHistorial(lecturas);
     })
     .catch((error) => {
@@ -599,7 +442,6 @@ function renderizarTablaHistorial(lecturas) {
 
   lecturas.forEach((item) => {
     const fechaTexto = item.fecha || "Sin fecha";
-
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td><strong>${fechaTexto}</strong></td>
@@ -611,44 +453,35 @@ function renderizarTablaHistorial(lecturas) {
   });
 }
 
-// ==================== CONTROL CON MOUSE ATTACK SHARK X11 ====================
+// ==================== 9. CONTROL CON MOUSE ATTACK SHARK X11 ====================
 let wheelClickTimer = null;
 
 document.addEventListener('mousedown', (event) => {
-  // Verificar si el panel de administración está activo
   const adminButtons = document.getElementById('admin-simulation-buttons');
   if (!adminButtons || adminButtons.classList.contains('hidden')) return;
 
-  // Si se hace clic en elementos interactivos (selects, inputs o enlaces), no disparar la simulación
   const targetTag = event.target.tagName.toLowerCase();
   if (['select', 'input', 'option', 'a'].includes(targetTag)) return;
 
-  // Prevenir menú contextual y navegación predeterminada
   if ([1, 2, 3, 4].includes(event.button)) {
     event.preventDefault();
   }
 
-  // Mapeo por botón del mouse
   switch (event.button) {
     case 0: // Clic Izquierdo
-      // Si el clic no fue directamente sobre un botón web, simula 'Poco Recto'
-      if (targetTag !== 'button') {
-        simularLectura('poco_recto');
-      }
+      if (targetTag !== 'button') simularLectura('poco_recto');
       break;
 
-    case 1: // Clic Central / Rueda (Manejo de Clic y Doble Clic)
+    case 1: // Clic Central / Rueda (Un Clic vs Doble Clic)
       if (wheelClickTimer === null) {
-        // Primer clic: esperar 250ms por si viene un segundo clic
         wheelClickTimer = setTimeout(() => {
-          simularLectura('muy_flexionado'); // Un solo clic en la rueda
+          simularLectura('muy_flexionado');
           wheelClickTimer = null;
         }, 250);
       } else {
-        // Segundo clic dentro del límite de tiempo: Doble clic en la rueda
         clearTimeout(wheelClickTimer);
         wheelClickTimer = null;
-        simularLectura('critico'); // Doble clic en la rueda
+        simularLectura('critico');
       }
       break;
 
@@ -666,7 +499,7 @@ document.addEventListener('mousedown', (event) => {
   }
 });
 
-// Desactivar el menú contextual emergente del Clic Derecho
+// Desactivar menú contextual del clic derecho en modo simulación
 document.addEventListener('contextmenu', (event) => {
   const adminButtons = document.getElementById('admin-simulation-buttons');
   if (adminButtons && !adminButtons.classList.contains('hidden')) {
